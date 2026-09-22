@@ -19,7 +19,7 @@ jobs:
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             device-tree-compiler libxml2-utils \
             qemu-system-arm qemu-system-data ipxe-qemu
-          pip3 install --break-system-packages jinja2 ply pyyaml pyelftools
+          pip3 install --break-system-packages jinja2 ply pyyaml pyelftools lxml
           # pyfdt's packaging predates modern setuptools; seL4's hardware_gen
           # only needs the module on the path.
           pip3 download --no-deps --no-build-isolation --no-binary :all: pyfdt -d /tmp/pyfdt

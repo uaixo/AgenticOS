@@ -16,7 +16,7 @@
 #   apt-get install -y build-essential cmake ninja-build python3 python3-pip \
 #       gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu device-tree-compiler \
 #       libxml2-utils qemu-system-arm qemu-system-data ipxe-qemu
-#   pip3 install jinja2 ply pyyaml pyelftools
+#   pip3 install jinja2 ply pyyaml pyelftools lxml
 #   rustup target add aarch64-unknown-none aarch64-unknown-none-softfloat
 #
 # seL4's build also needs pyfdt, which does not install cleanly from PyPI on
