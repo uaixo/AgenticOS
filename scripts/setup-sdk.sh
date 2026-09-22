@@ -10,11 +10,12 @@
 # and tested against, so a fresh checkout reproduces the same image.
 #
 # Needs: git, cmake, ninja, python3, a rust toolchain, an aarch64 cross
-# compiler, qemu-system-aarch64 with its ROMs, and dtc. On Debian or Ubuntu:
+# compiler, qemu-system-aarch64 with its ROMs, dtc, and xmllint, which seL4
+# validates its syscall XML with. On Debian or Ubuntu:
 #
 #   apt-get install -y build-essential cmake ninja-build python3 python3-pip \
 #       gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu device-tree-compiler \
-#       qemu-system-arm qemu-system-data ipxe-qemu
+#       libxml2-utils qemu-system-arm qemu-system-data ipxe-qemu
 #   pip3 install jinja2 ply pyyaml pyelftools
 #   rustup target add aarch64-unknown-none aarch64-unknown-none-softfloat
 #
