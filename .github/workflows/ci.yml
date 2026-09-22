@@ -1,0 +1,55 @@
+name: build and run the scenarios
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  qemu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build python3 python3-pip \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            device-tree-compiler qemu-system-arm qemu-system-data ipxe-qemu
+          pip3 install --break-system-packages jinja2 ply pyyaml pyelftools
+          # pyfdt's packaging predates modern setuptools; seL4's hardware_gen
+          # only needs the module on the path.
+          pip3 download --no-deps --no-build-isolation --no-binary :all: pyfdt -d /tmp/pyfdt
+          tar -C /tmp/pyfdt -xf /tmp/pyfdt/pyfdt-*.tar.gz
+          sudo cp -r /tmp/pyfdt/pyfdt-*/pyfdt \
+            "$(python3 -c 'import site;print(site.getsitepackages()[0])')"
+          rustup target add aarch64-unknown-none aarch64-unknown-none-softfloat
+          rustup component add rust-src
+
+      - name: cache the Microkit SDK
+        id: sdk
+        uses: actions/cache@v4
+        with:
+          path: sdk
+          key: microkit-sdk-${{ hashFiles('scripts/setup-sdk.sh') }}
+
+      - name: build the SDK
+        if: steps.sdk.outputs.cache-hit != 'true'
+        run: scripts/setup-sdk.sh
+
+      - name: build the image
+        run: make MICROKIT_SDK="$PWD/sdk/microkit-sdk-2.3.1"
+
+      - name: run the scenarios
+        run: make MICROKIT_SDK="$PWD/sdk/microkit-sdk-2.3.1" check
+
+      - name: build the virtio backend
+        run: make MICROKIT_SDK="$PWD/sdk/microkit-sdk-2.3.1" NET_BACKEND=virtio BUILD_DIR=build-virtio
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: console-transcripts
+          path: build/scenario_*.log

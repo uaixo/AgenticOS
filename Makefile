@@ -88,10 +88,12 @@ run: $(IMAGE_FILE)
 		-m size=2G -nographic
 
 # The live backend needs a bridge on the host; see tools/inference-bridge.py.
+INFER_SOCK ?= /tmp/agenticos-infer.sock
 run-live: $(IMAGE_FILE)
 	qemu-system-aarch64 -machine virt,virtualization=on -cpu cortex-a53 \
 		-serial mon:stdio -device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
 		-m size=2G -nographic \
+		-global virtio-mmio.force-legacy=false \
 		-device virtio-serial-device \
 		-chardev socket,path=$(INFER_SOCK),id=infer \
 		-device virtconsole,chardev=infer

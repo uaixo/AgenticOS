@@ -3,3 +3,6 @@ build/
 *.elf
 *.img
 __pycache__/
+build-virtio/
+sdk/
+.sdk-build/
