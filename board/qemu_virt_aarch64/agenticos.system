@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026 the AgenticOS authors
+ SPDX-License-Identifier: BSD-2-Clause
+
+ The system description is the architecture. Read the channel list at the
+ bottom: inferd has a channel to the two agent tasks and to netproxy, and to
+ nothing else. There is no line from the inference plane to a tool, so there
+ is no path for one. That is not a policy forbidding it; it is the absence
+ of a name.
+
+ Priorities are ordered so that Microkit's protected procedure calls run in
+ the right direction (a callee must outrank its caller), with one deliberate
+ exception at the top: inputd outranks everything, because a human must be
+ able to reach the input path while a tool component is spinning.
+-->
+<system>
+
+    <!-- The console device. Mapped into inputd and nowhere else. -->
+    <memory_region name="uart" size="0x1_000" phys_addr="0x9_000_000" />
+
+    <!-- virtio-mmio transport slots, for the live inference backend. -->
+    <memory_region name="virtio_mmio" size="0x4_000" phys_addr="0xa_000_000" />
+    <memory_region name="virtio_queue" size="0x1_000" />
+    <memory_region name="virtio_buf" size="0x2_000" />
+
+    <!-- One region per pair of components. Nothing is shared three ways. -->
+    <memory_region name="confirm"    size="0x1_000" />
+    <memory_region name="utterance"  size="0x1_000" />
+    <memory_region name="opcmd"      size="0x1_000" />
+    <memory_region name="call_a0"    size="0x1_000" />
+    <memory_region name="call_a1"    size="0x1_000" />
+    <memory_region name="call_mail"  size="0x1_000" />
+    <memory_region name="call_pay"   size="0x1_000" />
+    <memory_region name="infer_a0"   size="0x1_000" />
+    <memory_region name="infer_a1"   size="0x1_000" />
+    <memory_region name="infer_net"  size="0x1_000" />
+
+    <!-- Device plane -->
+
+    <protection_domain name="inputd" priority="254">
+        <program_image path="inputd.elf" />
+        <map mr="uart"      vaddr="0x2_000_000" perms="rw" cached="false" setvar_vaddr="uart_base" />
+        <map mr="confirm"   vaddr="0x4_000_000" perms="rw" setvar_vaddr="confirm_region" />
+        <map mr="utterance" vaddr="0x4_001_000" perms="rw" setvar_vaddr="utter_region" />
+        <map mr="opcmd"     vaddr="0x4_002_000" perms="rw" setvar_vaddr="opcmd_region" />
+        <irq irq="33" id="0" />
+    </protection_domain>
+
+    <!-- Control plane -->
+
+    <protection_domain name="taskd" priority="250">
+        <program_image path="taskd.elf" />
+        <map mr="opcmd" vaddr="0x4_002_000" perms="rw" setvar_vaddr="opcmd_region" />
+
+        <!--
+          The agent tasks are children of taskd, so taskd holds their thread
+          capabilities and revoking one is a kernel operation rather than a
+          cooperative shutdown.
+        -->
+        <protection_domain name="agent0" priority="210" id="0">
+            <program_image path="agent0.elf" />
+            <map mr="call_a0"   vaddr="0x4_000_000" perms="rw" setvar_vaddr="call_region" />
+            <map mr="infer_a0"  vaddr="0x4_001_000" perms="rw" setvar_vaddr="infer_region" />
+            <map mr="utterance" vaddr="0x4_002_000" perms="rw" setvar_vaddr="utter_region" />
+        </protection_domain>
+
+        <protection_domain name="agent1" priority="205" id="1">
+            <program_image path="agent1.elf" />
+            <map mr="call_a1"  vaddr="0x4_000_000" perms="rw" setvar_vaddr="call_region" />
+            <map mr="infer_a1" vaddr="0x4_001_000" perms="rw" setvar_vaddr="infer_region" />
+        </protection_domain>
+    </protection_domain>
+
+    <protection_domain name="keyring" priority="249">
+        <program_image path="keyring.elf" />
+    </protection_domain>
+
+    <protection_domain name="mediator" priority="240">
+        <program_image path="mediator.elf" />
+        <map mr="call_a0"   vaddr="0x4_000_000" perms="rw" setvar_vaddr="call_agent0" />
+        <map mr="call_a1"   vaddr="0x4_001_000" perms="rw" setvar_vaddr="call_agent1" />
+        <map mr="call_mail" vaddr="0x4_002_000" perms="rw" setvar_vaddr="call_tool_mail" />
+        <map mr="call_pay"  vaddr="0x4_003_000" perms="rw" setvar_vaddr="call_tool_pay" />
+        <map mr="confirm"   vaddr="0x4_004_000" perms="rw" setvar_vaddr="confirm_region" />
+    </protection_domain>
+
+    <!-- Tool plane -->
+
+    <protection_domain name="tool_mail" priority="245" budget="10_000" period="10_000">
+        <program_image path="tool_mail.elf" />
+        <map mr="call_mail" vaddr="0x4_000_000" perms="rw" setvar_vaddr="call_region" />
+    </protection_domain>
+
+    <protection_domain name="tool_pay" priority="245" budget="10_000" period="10_000">
+        <program_image path="tool_pay.elf" />
+        <map mr="call_pay" vaddr="0x4_000_000" perms="rw" setvar_vaddr="call_region" />
+    </protection_domain>
+
+    <protection_domain name="netproxy" priority="230">
+        <program_image path="netproxy.elf" />
+        <map mr="infer_net"    vaddr="0x4_000_000" perms="rw" setvar_vaddr="infer_net" />
+        <map mr="virtio_mmio"  vaddr="0x2_000_000" perms="rw" cached="false" setvar_vaddr="virtio_base" />
+        <map mr="virtio_queue" vaddr="0x4_010_000" perms="rw" cached="false" setvar_vaddr="virtio_queue_vaddr" />
+        <map mr="virtio_buf"   vaddr="0x4_011_000" perms="rw" cached="false" setvar_vaddr="virtio_buf_vaddr" />
+        <setvar symbol="virtio_queue_paddr" region_paddr="virtio_queue" />
+        <setvar symbol="virtio_buf_paddr"   region_paddr="virtio_buf" />
+    </protection_domain>
+
+    <!-- Inference plane -->
+
+    <protection_domain name="inferd" priority="220">
+        <program_image path="inferd.elf" />
+        <map mr="infer_a0"  vaddr="0x4_000_000" perms="rw" setvar_vaddr="infer_agent0" />
+        <map mr="infer_a1"  vaddr="0x4_001_000" perms="rw" setvar_vaddr="infer_agent1" />
+        <map mr="infer_net" vaddr="0x4_002_000" perms="rw" setvar_vaddr="infer_net" />
+    </protection_domain>
+
+    <!-- Channels -->
+
+    <channel>
+        <end pd="inputd"   id="1" />
+        <end pd="mediator" id="5" />
+    </channel>
+    <channel>
+        <end pd="inputd" id="2" />
+        <end pd="agent0" id="3" />
+    </channel>
+    <channel>
+        <end pd="inputd" id="3" />
+        <end pd="taskd"  id="3" />
+    </channel>
+
+    <channel>
+        <end pd="mediator" id="0" />
+        <end pd="agent0"   id="0" pp="true" />
+    </channel>
+    <channel>
+        <end pd="mediator" id="1" />
+        <end pd="agent1"   id="0" pp="true" />
+    </channel>
+    <channel>
+        <end pd="taskd"    id="0" />
+        <end pd="mediator" id="2" pp="true" />
+    </channel>
+    <channel>
+        <end pd="tool_mail" id="0" />
+        <end pd="mediator"  id="3" pp="true" />
+    </channel>
+    <channel>
+        <end pd="tool_pay" id="0" />
+        <end pd="mediator" id="4" pp="true" />
+    </channel>
+    <channel>
+        <end pd="keyring"  id="0" />
+        <end pd="mediator" id="6" pp="true" />
+    </channel>
+
+    <channel>
+        <end pd="taskd"  id="1" />
+        <end pd="agent0" id="1" pp="true" />
+    </channel>
+    <channel>
+        <end pd="taskd"  id="2" />
+        <end pd="agent1" id="1" pp="true" />
+    </channel>
+
+    <channel>
+        <end pd="inferd" id="0" />
+        <end pd="agent0" id="2" pp="true" />
+    </channel>
+    <channel>
+        <end pd="inferd" id="1" />
+        <end pd="agent1" id="2" pp="true" />
+    </channel>
+    <channel>
+        <end pd="netproxy" id="0" />
+        <end pd="inferd"   id="2" pp="true" />
+    </channel>
+
+    <channel>
+        <end pd="keyring"   id="1" />
+        <end pd="tool_mail" id="1" pp="true" />
+    </channel>
+    <channel>
+        <end pd="keyring"  id="2" />
+        <end pd="tool_pay" id="1" pp="true" />
+    </channel>
+
+</system>
